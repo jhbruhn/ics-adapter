@@ -8,7 +8,7 @@ RUN rm src/*.rs
 
 ADD . ./
 
-RUN rm ./target/release/deps/ics-adapter*
+RUN rm ./target/release/deps/ics_adapter*
 RUN cargo build --release
 
 
