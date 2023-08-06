@@ -96,7 +96,18 @@ async fn convert(url: &str) -> Result<CustomCalendar> {
 
 fn convert_time(dt: icalendar::DatePerhapsTime) -> Result<i64> {
     Ok(match dt {
-        icalendar::DatePerhapsTime::DateTime(cdt) => cdt.try_into_utc().ok_or(anyhow::Error::msg("failed to convert to utc"))?.timestamp(),
+        icalendar::DatePerhapsTime::DateTime(cdt) => {
+            let cdt = match cdt {
+                icalendar::CalendarDateTime::WithTimezone{date_time, tzid} => {
+                    icalendar::CalendarDateTime::WithTimezone{date_time, tzid: String::from(match tzid.as_str() {
+                        "W. Europe Standard Time" => "Europe/London",
+                        _ => &tzid
+                    })}
+                },
+                _ => cdt,
+            };
+            cdt.try_into_utc().ok_or(anyhow::Error::msg("failed to convert to utc"))?.timestamp()
+        },
         icalendar::DatePerhapsTime::Date(nd) => nd.and_hms_opt(0, 0, 0).unwrap().timestamp(),
     })
 }
