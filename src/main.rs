@@ -62,13 +62,20 @@ async fn convert(url: &str) -> Result<CustomCalendar> {
                 continue;
             };
 
-            let Ok(start) = convert_time(start) else {
-                println!("Invalid timestamp");
-                continue;
+            let start = match convert_time(start) {
+                Ok(t) => { t },
+                Err(e) => {
+                    println!("Invalid start timestamp: {:?}", e);
+                    continue;
+                }
             };
-            let Ok(end) = convert_time(end) else {
-                println!("Invalid timestamp");
-                continue;
+
+            let end = match convert_time(end) {
+                Ok(t) => { t },
+                Err(e) => {
+                    println!("Invalid end timestamp: {:?}", e);
+                    continue;
+                }
             };
 
             if start < filter_start || start > filter_end {
