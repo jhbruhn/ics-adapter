@@ -13,9 +13,9 @@ RUN rm src/*.rs
 
 ADD . ./
 
-RUN rm ./target/release/deps/ics_adapter*
+RUN rm ./target/$(cat /.platform)/release/deps/ics_adapter*
 RUN cargo build --release --target $(cat /.platform)
-RUN cp /usr/src/trow/target/$(cat /.platform)/release/ics-adapter /ics-adapter.bin # Get rid of this when build --out is stable
+RUN cp ./target/$(cat /.platform)/release/ics-adapter /ics-adapter.bin # Get rid of this when build --out is stable
 
 
 FROM debian:buster-slim
