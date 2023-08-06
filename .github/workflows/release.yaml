@@ -47,9 +47,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-multi-buildx-${{ github.sha }}
+          key: ${{ runner.os }}-multi-${{ matrix.platform }}-buildx-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-multi-buildx
+            ${{ runner.os }}-multi-${{ matrix.platform }}-buildx
       -
         name: Build and push by digest
         id: build
