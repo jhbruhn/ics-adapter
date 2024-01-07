@@ -100,6 +100,8 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
         calendar_index += 1;
     }
 
+    entries.sort_by(|a, b| a.start.cmp(&b.start));
+
     Ok(CustomCalendar{entries})
 }
 
