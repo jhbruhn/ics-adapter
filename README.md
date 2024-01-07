@@ -28,6 +28,11 @@ With an actual .ics url, it looks like this:
 http://192.168.178.42:3000/calendar/https%3A%2F%2Fnextcloud.net%2Fremote.php%2Fdav%2Fpublic-calendars%2Fasdlkijf/entries
 ```
 
+You may also list multiple urls to calendars separated with a `;`:
+```
+http://<docker-host>:3000/calendar/<ics-url-1>;<ics-url-2>/entries
+```
+
 Previous versions also supported these URL formats, but these are not compatible with modern OEPL features:
 
 ```
