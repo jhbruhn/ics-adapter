@@ -10,13 +10,14 @@ use serde::Serialize;
 
 async fn handler(params: HashMap<String, String>) -> Result<impl Reply, Rejection> {
     match params.get("url") {
-        Some(url) => Ok(warp::reply::json(&convert(&url, params.get("days")).await.map_err(|_| warp::reject::reject())?.entries)),
+        Some(url) => Ok(warp::reply::json(&convert(&[url], params.get("days")).await.map_err(|_| warp::reject::reject())?.entries)),
         None => Err(warp::reject::reject())
     }
 }
 
 async fn new_handler(url: String, params: HashMap<String, String>) -> Result<impl Reply, Rejection> {
-        Ok(warp::reply::json(&convert(&url, params.get("days")).await.map_err(|_| warp::reject::reject())?.entries))
+    let urls: Vec<&str> = url.split(";").collect();
+        Ok(warp::reply::json(&convert(&urls, params.get("days")).await.map_err(|_| warp::reject::reject())?.entries))
 }
 
 #[derive(Serialize)]
@@ -34,61 +35,63 @@ struct CustomCalendarEntry {
     isallday: bool,
 }
 
-async fn convert(url: &str, days: Option<&String>) -> Result<CustomCalendar> {
-    let url = urlencoding::decode(url)?.into_owned();
-    let ics_text = reqwest::get(url)
-        .await?
-        .text()
-        .await?;
-    
-    let calendar = ics_text.parse::<Calendar>().map_err(|e| anyhow::Error::msg(e))?;
-
+async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar> {
     let mut entries = Vec::new();
-    
-    let filter_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-    let filter_end = filter_start + chrono::Duration::days(days.unwrap_or(&String::from("1")).parse().unwrap_or(1));
+    for url in urls {
+        let url = urlencoding::decode(url)?.into_owned();
+        let ics_text = reqwest::get(url)
+            .await?
+            .text()
+            .await?;
+        
+        let calendar = ics_text.parse::<Calendar>().map_err(|e| anyhow::Error::msg(e))?;
 
-    for event in calendar.components {
-        if let Some(event) = event.as_event() {
-            let Some(start) = event.get_start() else {
-                println!("No start!");
-                continue;
-            };
+        
+        let filter_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let filter_end = filter_start + chrono::Duration::days(days.unwrap_or(&String::from("1")).parse().unwrap_or(1));
 
-            let start = match convert_time(start) {
-                Ok(t) => { t },
-                Err(e) => {
-                    println!("Invalid start timestamp: {:?}", e);
+        for event in calendar.components {
+            if let Some(event) = event.as_event() {
+                let Some(start) = event.get_start() else {
+                    println!("No start!");
+                    continue;
+                };
+
+                let start = match convert_time(start) {
+                    Ok(t) => { t },
+                    Err(e) => {
+                        println!("Invalid start timestamp: {:?}", e);
+                        continue;
+                    }
+                };
+
+                let end = match event.get_end() {
+                    Some(end) => {
+                        match convert_time(end) {
+                            Ok(t) => { t },
+                            Err(e) => {
+                                println!("Invalid end timestamp: {:?}", e);
+                                continue;
+                            }
+                        }
+                    },
+                    None => start + chrono::Duration::days(1),
+                };
+
+                if start < filter_start || start > filter_end {
                     continue;
                 }
-            };
 
-            let end = match event.get_end() {
-                Some(end) => {
-                    match convert_time(end) {
-                        Ok(t) => { t },
-                        Err(e) => {
-                            println!("Invalid end timestamp: {:?}", e);
-                            continue;
-                        }
-                    }
-                },
-                None => start + chrono::Duration::days(1),
-            };
-
-            if start < filter_start || start > filter_end {
-                continue;
+                entries.push(CustomCalendarEntry {
+                    title: event.get_summary().unwrap_or("").to_string(),
+                    description: event.get_description().unwrap_or("").to_string(),
+                    location: event.get_location().unwrap_or("").to_string(),
+                    start: start.timestamp(),
+                    end: end.timestamp(),
+                    isallday: start.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap() && end - start == chrono::Duration::days(1) // the event has a length of 24 hours and
+                                                            // starts at 00:00
+                });
             }
-
-            entries.push(CustomCalendarEntry {
-                title: event.get_summary().unwrap_or("").to_string(),
-                description: event.get_description().unwrap_or("").to_string(),
-                location: event.get_location().unwrap_or("").to_string(),
-                start: start.timestamp(),
-                end: end.timestamp(),
-                isallday: start.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap() && end - start == chrono::Duration::days(1) // the event has a length of 24 hours and
-                                                        // starts at 00:00
-            });
         }
     }
 
