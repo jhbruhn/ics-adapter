@@ -33,10 +33,12 @@ struct CustomCalendarEntry {
     location: String,
     description: String,
     isallday: bool,
+    calendar: u64,
 }
 
 async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar> {
     let mut entries = Vec::new();
+    let mut calendar_index = 0;
     for url in urls {
         let url = urlencoding::decode(url)?.into_owned();
         let ics_text = reqwest::get(url)
@@ -88,11 +90,14 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     location: event.get_location().unwrap_or("").to_string(),
                     start: start.timestamp(),
                     end: end.timestamp(),
+                    calendar: calendar_index,
                     isallday: start.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap() && end - start == chrono::Duration::days(1) // the event has a length of 24 hours and
                                                             // starts at 00:00
                 });
             }
         }
+
+        calendar_index += 1;
     }
 
     Ok(CustomCalendar{entries})
