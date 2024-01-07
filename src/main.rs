@@ -1,4 +1,3 @@
-use std::time::{SystemTime, UNIX_EPOCH};
 use warp::{
     Filter,
     Reply,
@@ -8,14 +7,6 @@ use std::collections::HashMap;
 use anyhow::Result;
 use icalendar::{Component, Calendar, EventLike};
 use serde::Serialize;
-
-fn now_timestamp_secs() -> i64 {
-    let start = SystemTime::now();
-    let since_the_epoch = start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards");
-    (since_the_epoch.as_millis() / 1000).try_into().unwrap()
-}
 
 async fn handler(params: HashMap<String, String>) -> Result<impl Reply, Rejection> {
     match params.get("url") {
@@ -54,8 +45,8 @@ async fn convert(url: &str, days: Option<&String>) -> Result<CustomCalendar> {
 
     let mut entries = Vec::new();
     
-    let filter_start = now_timestamp_secs();
-    let filter_end = now_timestamp_secs() + (24 * 60 * 60) * days.unwrap_or(&String::from("1")).parse().unwrap_or(1) as i64;
+    let filter_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+    let filter_end = filter_start + chrono::Duration::days(days.unwrap_or(&String::from("1")).parse().unwrap_or(1));
 
     for event in calendar.components {
         if let Some(event) = event.as_event() {
@@ -85,9 +76,10 @@ async fn convert(url: &str, days: Option<&String>) -> Result<CustomCalendar> {
                 None => start + chrono::Duration::days(1),
             };
 
-            if start.timestamp() < filter_start || start.timestamp() > filter_end {
+            if start < filter_start || start > filter_end {
                 continue;
             }
+
             entries.push(CustomCalendarEntry {
                 title: event.get_summary().unwrap_or("").to_string(),
                 description: event.get_description().unwrap_or("").to_string(),
