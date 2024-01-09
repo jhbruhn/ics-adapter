@@ -80,9 +80,32 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     None => start + chrono::Duration::days(1),
                 };
 
-                if start < filter_start || start > filter_end {
+                let length = end - start;
+
+                let start_dates = if let Some(rrule) = event.properties().get("RRULE") {
+                    //let vector = Vec::new();
+                    let rrule_str = rrule.value();
+                    let string = format!("DTSTART:{}\n{}", event.properties().get("DTSTART").unwrap().value(), rrule_str);
+                    let rrule: rrule::RRuleSet = string.parse()?;
+                    let date_set = rrule.all(100).dates;
+                    date_set.iter().map(|x| x.with_timezone(&chrono::Utc)).collect()
+                } else {
+                    vec!(start)
+                };
+
+                let mut found = false;
+                for start_date in start_dates {
+                    if start_date >= filter_start && start_date <= filter_end {
+                        found = true;
+                        break;
+                    }
+                }
+
+                if !found {
                     continue;
                 }
+
+                let end = start + length;
 
                 entries.push(CustomCalendarEntry {
                     title: event.get_summary().unwrap_or("").to_string(),

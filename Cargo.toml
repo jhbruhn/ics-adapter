@@ -14,3 +14,4 @@ icalendar = { version = "0.15", features = ["chrono-tz"] }
 serde = { version = "1.0", features = ["derive"] }
 urlencoding = "2"
 chrono = "0"
+rrule = "0"
