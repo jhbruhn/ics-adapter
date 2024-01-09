@@ -93,18 +93,15 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     vec!(start)
                 };
 
-                let mut found = false;
+                let mut start = None;
                 for start_date in start_dates {
                     if start_date >= filter_start && start_date <= filter_end {
-                        found = true;
+                        start = Some(start_date);
                         break;
                     }
                 }
 
-                if !found {
-                    continue;
-                }
-
+                if let Some(start) = start {
                 let end = start + length;
 
                 entries.push(CustomCalendarEntry {
@@ -117,6 +114,7 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     isallday: start.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap() && end - start == chrono::Duration::days(1) // the event has a length of 24 hours and
                                                             // starts at 00:00
                 });
+                }
             }
         }
 
