@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.70 as cross
+FROM --platform=$BUILDPLATFORM rust:1.75 as cross
 ARG TARGETARCH
 COPY docker/platform.sh .
 RUN ./platform.sh # should write /.platform and /.compiler
@@ -11,7 +11,7 @@ RUN cargo build --release --target $(cat /.platform)
 RUN cp ./target/$(cat /.platform)/release/ics-adapter /ics-adapter.bin # Get rid of this when build --out is stable
 
 
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 ARG APP=/usr/src/app
 
 RUN apt-get update \
