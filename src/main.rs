@@ -87,7 +87,8 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     let rrule_str = rrule.value();
                     let string = format!("DTSTART:{}\n{}", event.properties().get("DTSTART").unwrap().value(), rrule_str);
                     let rrule: rrule::RRuleSet = string.parse()?;
-                    let date_set = rrule.all(100).dates;
+                    let repeats = std::env::var("RULE_REPEATS").ok().and_then(|x| x.parse().ok()).unwrap_or(100);
+                    let date_set = rrule.all(repeats).dates;
                     date_set.iter().map(|x| x.with_timezone(&chrono::Utc)).collect()
                 } else {
                     vec!(start)
@@ -133,6 +134,9 @@ fn convert_time(dt: icalendar::DatePerhapsTime) -> Result<chrono::DateTime<chron
                 icalendar::CalendarDateTime::WithTimezone{date_time, tzid} => {
                     icalendar::CalendarDateTime::WithTimezone{date_time, tzid: String::from(match tzid.as_str() {
                         "W. Europe Standard Time" => "Europe/London",
+                        "Turkey Standard Time" => "Europe/Istanbul",
+                        "India Standard Time" => "Asia/Kolkata",
+                        "Pacific Standard Time" => "America/Los Angeles",
                         _ => &tzid
                     })}
                 },
