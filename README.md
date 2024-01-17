@@ -14,6 +14,7 @@ services:
         restart: unless-stopped
         environment:
             TZ: Europe/Berlin # your timezone!
+            RULE_REPEATS: 100 # optional, the amount of repeats that should be done for repeating rules. Set to higher value if you are missing events of old repeating events
 ```
 
 As you can see, you only have to forward port 3000 to wherever you like, in this case port 3000.
