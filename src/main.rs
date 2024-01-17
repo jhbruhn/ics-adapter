@@ -133,10 +133,10 @@ fn convert_time(dt: icalendar::DatePerhapsTime) -> Result<chrono::DateTime<chron
             let cdt = match cdt {
                 icalendar::CalendarDateTime::WithTimezone{date_time, tzid} => {
                     icalendar::CalendarDateTime::WithTimezone{date_time, tzid: String::from(match tzid.as_str() {
-                        "W. Europe Standard Time" => "Europe/London",
                         "Turkey Standard Time" => "Europe/Istanbul",
                         "India Standard Time" => "Asia/Kolkata",
                         "Pacific Standard Time" => "America/Los Angeles",
+                        "W. Europe Standard Time" => "Europe/Berlin",
                         _ => &tzid
                     })}
                 },
