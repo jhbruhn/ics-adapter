@@ -1,28 +1,37 @@
-use warp::{
-    Filter,
-    Reply,
-    Rejection,
-};
-use std::collections::HashMap;
 use anyhow::Result;
-use icalendar::{Component, Calendar, EventLike};
+use icalendar::{Calendar, Component, EventLike};
 use serde::Serialize;
+use std::collections::HashMap;
+use warp::{Filter, Rejection, Reply};
 
 async fn handler(params: HashMap<String, String>) -> Result<impl Reply, Rejection> {
     match params.get("url") {
-        Some(url) => Ok(warp::reply::json(&convert(&[url], params.get("days")).await.map_err(|_| warp::reject::reject())?.entries)),
-        None => Err(warp::reject::reject())
+        Some(url) => Ok(warp::reply::json(
+            &convert(&[url], params.get("days"))
+                .await
+                .map_err(|_| warp::reject::reject())?
+                .entries,
+        )),
+        None => Err(warp::reject::reject()),
     }
 }
 
-async fn new_handler(url: String, params: HashMap<String, String>) -> Result<impl Reply, Rejection> {
+async fn new_handler(
+    url: String,
+    params: HashMap<String, String>,
+) -> Result<impl Reply, Rejection> {
     let urls: Vec<&str> = url.split(";").collect();
-        Ok(warp::reply::json(&convert(&urls, params.get("days")).await.map_err(|_| warp::reject::reject())?.entries))
+    Ok(warp::reply::json(
+        &convert(&urls, params.get("days"))
+            .await
+            .map_err(|_| warp::reject::reject())?
+            .entries,
+    ))
 }
 
 #[derive(Serialize)]
 struct CustomCalendar {
-    entries: Vec<CustomCalendarEntry>,   
+    entries: Vec<CustomCalendarEntry>,
 }
 
 #[derive(Serialize)]
@@ -41,16 +50,19 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
     let mut calendar_index = 0;
     for url in urls {
         let url = urlencoding::decode(url)?.into_owned();
-        let ics_text = reqwest::get(url)
-            .await?
-            .text()
-            .await?;
-        
-        let calendar = ics_text.parse::<Calendar>().map_err(|e| anyhow::Error::msg(e))?;
+        let ics_text = reqwest::get(url).await?.text().await?;
 
-        
-        let filter_start = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
-        let filter_end = filter_start + chrono::Duration::days(days.unwrap_or(&String::from("1")).parse().unwrap_or(1));
+        let calendar = ics_text
+            .parse::<Calendar>()
+            .map_err(|e| anyhow::Error::msg(e))?;
+
+        let filter_start = chrono::Utc::now()
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc();
+        let filter_end =
+            filter_start + chrono::Duration::days(days.and_then(|x| x.parse().ok()).unwrap_or(1));
 
         for event in calendar.components {
             if let Some(event) = event.as_event() {
@@ -60,7 +72,7 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                 };
 
                 let start = match convert_time(start) {
-                    Ok(t) => { t },
+                    Ok(t) => t,
                     Err(e) => {
                         println!("Invalid start timestamp: {:?}", e);
                         continue;
@@ -68,13 +80,11 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                 };
 
                 let end = match event.get_end() {
-                    Some(end) => {
-                        match convert_time(end) {
-                            Ok(t) => { t },
-                            Err(e) => {
-                                println!("Invalid end timestamp: {:?}", e);
-                                continue;
-                            }
+                    Some(end) => match convert_time(end) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            println!("Invalid end timestamp: {:?}", e);
+                            continue;
                         }
                     },
                     None => start + chrono::Duration::days(1),
@@ -85,36 +95,41 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                 let start_dates = if let Some(rrule) = event.properties().get("RRULE") {
                     //let vector = Vec::new();
                     let rrule_str = rrule.value();
-                    let string = format!("DTSTART:{}\n{}", event.properties().get("DTSTART").unwrap().value(), rrule_str);
+                    let string = format!(
+                        "DTSTART:{}\n{}",
+                        event.properties().get("DTSTART").unwrap().value(),
+                        rrule_str
+                    );
                     let rrule: rrule::RRuleSet = string.parse()?;
-                    let repeats = std::env::var("RULE_REPEATS").ok().and_then(|x| x.parse().ok()).unwrap_or(100);
-                    let date_set = rrule.all(repeats).dates;
-                    date_set.iter().map(|x| x.with_timezone(&chrono::Utc)).collect()
+                    let date_set = rrule
+                        .into_iter()
+                        .skip_while(|x| x < &filter_start)
+                        .take_while(|x| x <= &filter_end)
+                        .map(|x| x.with_timezone(&chrono::Utc))
+                        .collect();
+                    date_set
                 } else {
-                    vec!(start)
+                    vec![start]
                 };
 
-                let mut start = None;
-                for start_date in start_dates {
-                    if start_date >= filter_start && start_date <= filter_end {
-                        start = Some(start_date);
-                        break;
-                    }
-                }
+                for start in start_dates
+                    .iter()
+                    .skip_while(|x| x < &&filter_start)
+                    .take_while(|x| x <= &&filter_end)
+                {
+                    let end = *start + length;
 
-                if let Some(start) = start {
-                let end = start + length;
-
-                entries.push(CustomCalendarEntry {
-                    title: event.get_summary().unwrap_or("").to_string(),
-                    description: event.get_description().unwrap_or("").to_string(),
-                    location: event.get_location().unwrap_or("").to_string(),
-                    start: start.timestamp(),
-                    end: end.timestamp(),
-                    calendar: calendar_index,
-                    isallday: start.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap() && end - start == chrono::Duration::days(1) // the event has a length of 24 hours and
-                                                            // starts at 00:00
-                });
+                    entries.push(CustomCalendarEntry {
+                        title: event.get_summary().unwrap_or("").to_string(),
+                        description: event.get_description().unwrap_or("").to_string(),
+                        location: event.get_location().unwrap_or("").to_string(),
+                        start: start.timestamp(),
+                        end: end.timestamp(),
+                        calendar: calendar_index,
+                        isallday: start.time() == chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap()
+                            && end - *start == chrono::Duration::days(1), // the event has a length of 24 hours and
+                                                                          // starts at 00:00
+                    });
                 }
             }
         }
@@ -124,26 +139,30 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
 
     entries.sort_by(|a, b| a.start.cmp(&b.start));
 
-    Ok(CustomCalendar{entries})
+    Ok(CustomCalendar { entries })
 }
 
 fn convert_time(dt: icalendar::DatePerhapsTime) -> Result<chrono::DateTime<chrono::Utc>> {
     Ok(match dt {
         icalendar::DatePerhapsTime::DateTime(cdt) => {
             let cdt = match cdt {
-                icalendar::CalendarDateTime::WithTimezone{date_time, tzid} => {
-                    icalendar::CalendarDateTime::WithTimezone{date_time, tzid: String::from(match tzid.as_str() {
-                        "Turkey Standard Time" => "Europe/Istanbul",
-                        "India Standard Time" => "Asia/Kolkata",
-                        "Pacific Standard Time" => "America/Los Angeles",
-                        "W. Europe Standard Time" => "Europe/Berlin",
-                        _ => &tzid
-                    })}
-                },
+                icalendar::CalendarDateTime::WithTimezone { date_time, tzid } => {
+                    icalendar::CalendarDateTime::WithTimezone {
+                        date_time,
+                        tzid: String::from(match tzid.as_str() {
+                            "Turkey Standard Time" => "Europe/Istanbul",
+                            "India Standard Time" => "Asia/Kolkata",
+                            "Pacific Standard Time" => "America/Los Angeles",
+                            "W. Europe Standard Time" => "Europe/Berlin",
+                            _ => &tzid,
+                        }),
+                    }
+                }
                 _ => cdt,
             };
-            cdt.try_into_utc().ok_or(anyhow::Error::msg("failed to convert to utc"))?
-        },
+            cdt.try_into_utc()
+                .ok_or(anyhow::Error::msg("failed to convert to utc"))?
+        }
         icalendar::DatePerhapsTime::Date(nd) => nd.and_hms_opt(0, 0, 0).unwrap().and_utc(),
     })
 }
