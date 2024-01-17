@@ -12,6 +12,8 @@ services:
         ports:
             - "3000:3000"
         restart: unless-stopped
+        environment:
+            TZ: Europe/Berlin # your timezone!
 ```
 
 As you can see, you only have to forward port 3000 to wherever you like, in this case port 3000.
