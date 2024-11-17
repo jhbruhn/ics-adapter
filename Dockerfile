@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.75 as cross
+FROM --platform=$BUILDPLATFORM rust:1.82 as cross
 ARG TARGETARCH
 COPY docker/platform.sh .
 RUN ./platform.sh # should write /.platform and /.compiler

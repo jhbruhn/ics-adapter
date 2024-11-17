@@ -3,6 +3,7 @@ use icalendar::{Calendar, Component, EventLike};
 use serde::Serialize;
 use std::collections::HashMap;
 use warp::{Filter, Rejection, Reply};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 async fn handler(params: HashMap<String, String>) -> Result<impl Reply, Rejection> {
     match params.get("url") {
@@ -50,7 +51,9 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
     let mut calendar_index = 0;
     for url in urls {
         let url = urlencoding::decode(url)?.into_owned();
+        tracing::info!("Converting for {}", url);
         let ics_text = reqwest::get(url).await?.text().await?;
+        tracing::info!("Got text");
 
         let calendar = ics_text
             .parse::<Calendar>()
@@ -64,17 +67,20 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
         let filter_end =
             filter_start + chrono::Duration::days(days.and_then(|x| x.parse().ok()).unwrap_or(1));
 
+        tracing::info!("Filtering for events between {} and {}", filter_start, filter_end);
+
         for event in calendar.components {
+            
             if let Some(event) = event.as_event() {
                 let Some(start) = event.get_start() else {
-                    println!("No start!");
+                    tracing::debug!("No start!");
                     continue;
                 };
 
                 let start = match convert_time(start) {
                     Ok(t) => t,
                     Err(e) => {
-                        println!("Invalid start timestamp: {:?}", e);
+                        tracing::debug!("Invalid start timestamp: {:?}", e);
                         continue;
                     }
                 };
@@ -83,7 +89,7 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     Some(end) => match convert_time(end) {
                         Ok(t) => t,
                         Err(e) => {
-                            println!("Invalid end timestamp: {:?}", e);
+                            tracing::debug!("Invalid end timestamp: {:?}", e);
                             continue;
                         }
                     },
@@ -112,11 +118,14 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
                     vec![start]
                 };
 
+                tracing::debug!("Event times: {:?}", start_dates);
+
                 for start in start_dates
                     .iter()
                     .skip_while(|x| x < &&filter_start)
                     .take_while(|x| x <= &&filter_end)
                 {
+                    tracing::debug!("Testing time {:?}", start);
                     let end = *start + length;
 
                     entries.push(CustomCalendarEntry {
@@ -138,6 +147,8 @@ async fn convert(urls: &[&str], days: Option<&String>) -> Result<CustomCalendar>
     }
 
     entries.sort_by(|a, b| a.start.cmp(&b.start));
+
+    tracing::info!("Returning {} entries", entries.len());
 
     Ok(CustomCalendar { entries })
 }
@@ -169,6 +180,15 @@ fn convert_time(dt: icalendar::DatePerhapsTime) -> Result<chrono::DateTime<chron
 
 #[tokio::main]
 async fn main() {
+    let filter = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| "ics_adapter=info,tracing=info,warp=debug".to_owned());
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_span_events(FmtSpan::CLOSE)
+        .init();
+
+    tracing::info!("Hello");
+
     let converter = warp::path("get")
         .and(warp::query::<HashMap<String, String>>())
         .and_then(handler);
